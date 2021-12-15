@@ -1,7 +1,9 @@
-__all__ = ['xr']
+__all__ = ['xr', 'pd', 'np', 'plt']
+
 import xarray as xr
 import pandas as pd
 import numpy as np
+import matplotlib as plt
 
 
 @xr.register_dataset_accessor("cmaq")
@@ -56,16 +58,47 @@ class CmaqAccessor:
         else:
             return self.get_time_frommeta(mid=mid)
 
+    def set_col_coord(self):
+        obj = self._obj
+        obj['COL'] = xr.DataArray(
+            np.arange(obj.NCOLS) + 0.5,
+            dims=('COL',), name='COL'
+        )
+
+    def set_row_coord(self):
+        obj = self._obj
+        obj['ROW'] = xr.DataArray(
+            np.arange(obj.NROWS) + 0.5,
+            dims=('ROW',), name='ROW'
+        )
+
+    def set_vglvls_coord(self):
+        obj = self._obj
+        obj['LAY'] = xr.DataArray(
+            (obj.VGLVLS[1:] + obj.VGLVLS[:-1]) / 2,
+            dims=('LAY',), name='LAY'
+        )
+
     def set_time_coord(self, mid=False):
         obj = self._obj
         obj['TSTEP'] = self.get_time(mid=mid)
+
+    def set_coords(self, timemid=False):
+        self.set_time_coord(mid=timemid)
+        self.set_vglvls_coord()
+        self.set_row_coord()
+        self.set_col_coord()
 
     @property
     def proj4(self):
         """Return the projection of this dataset."""
         if self._proj4 is None:
             from PseudoNetCDF.coordutil import getproj4
-            self._proj4 = getproj4(self._obj, withgrid=True)
+            import warnings
+            with warnings.catch_warnings():
+                warnings.simplefilter('ignore')
+                self._proj4 = getproj4(self._obj, withgrid=True)
+
         return self._proj4
 
     @property
