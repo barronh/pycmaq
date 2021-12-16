@@ -77,15 +77,20 @@ def test_cmaq_accessor():
     assert(hasattr(ds, 'cmaq'))
 
 
-def test_cmaq_proj4():
+def test_cmaq_pyproj():
+    import pyproj
     ds = gettest()
-    proj4 = ds.cmaq.proj4
-    refval = (
+    inlon = np.arange(-110, -50, 10)
+    inlat = np.arange(20, 80, 10)
+
+    refval = pyproj.Proj(
         '+proj=lcc +lat_1=30.0 +lat_2=60.0 +lat_0=40.0 +lon_0=-90.0'
         + ' +y_0=730076.0 +x_0=2831931.0 +a=6370000 +b=6370000'
-        + ' +to_meter=600000.0 +no_defs'
-    )
-    assert(proj4 == refval)
+        + ' +to_meter=600000.0 +no_defs', preserve_units=True
+    )(inlon, inlat)
+    chkval = ds.cmaq.pyproj(inlon, inlat)
+
+    assert(np.allclose(chkval, refval))
 
 
 def test_cmaq_set_time_coord(ds=None):
@@ -96,6 +101,20 @@ def test_cmaq_set_time_coord(ds=None):
     assert(
         (ds['TSTEP'] == refval).all()
     )
+
+
+def test_cmaq_get_time():
+    ds = gettest()
+    refval = np.array('1983-09-07T00:00:00.0', dtype='datetime64[ns]')
+    chkval = ds.cmaq.get_time(tflag=True)
+    assert((chkval == refval).all())
+    chkval = ds.cmaq.get_time(tflag=False)
+    assert((chkval == refval).all())
+    refval = np.array('1983-09-07T00:30:00.0', dtype='datetime64[ns]')
+    chkval = ds.cmaq.get_time(tflag=True, mid=True)
+    assert((chkval == refval).all())
+    chkval = ds.cmaq.get_time(tflag=False, mid=True)
+    assert((chkval == refval).all())
 
 
 def test_cmaq_set_vglvls_coord(ds=None):
@@ -135,3 +154,18 @@ def test_cmaq_set_coords():
     test_cmaq_set_vglvls_coord(ds)
     test_cmaq_set_row_coord(ds)
     test_cmaq_set_col_coord(ds)
+
+def test_cmaq_to_ioapi():
+    import tempfile
+    ds = gettest()
+    ds.cmaq.set_coords()
+    with tempfile.TemporaryDirectory() as tmpdirname:
+        outpath = f'{tmpdirname}/writeout.nc'
+        print(0)
+        chkds = ds.cmaq.to_ioapi(outpath, close=False)
+        print(1)
+        for key, chkv in chkds.variables.items():
+            print(2)
+            if key != 'TFLAG':
+                refv = ds[key]
+                assert(np.allclose(refv, chkv))
