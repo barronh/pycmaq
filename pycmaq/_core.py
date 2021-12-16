@@ -335,7 +335,9 @@ class CmaqAccessor:
         """
         return self.cnodraw('MWDB_Coasts_USA_3.cnob', ax=ax, **kwds)
 
-    def to_lst_dataarray(self, timezone, var, out=None, verbose=0):
+    def to_lst_dataarray(
+        self, timezone, var, out=None, lowmem=False, verbose=0
+    ):
         """
         Arguments
         ---------
@@ -347,6 +349,10 @@ class CmaqAccessor:
             variable to shift to LST
         out : xr.DataArray
             variable to house the output. If None, then out = var * 0
+        lowmem : bool
+            If working with low-memory, data response will be slower. Else,
+            use load to load data once. This is really only important for
+            NETCDF3_CLASSIC.
 
         Returns
         -------
@@ -367,11 +373,32 @@ class CmaqAccessor:
             tzlay = tzvar
 
         utz = np.unique(tzlay.data)
+        nshifted = 0
+        ntoshift = np.prod(out.shape[-2:])
+
+        # Using temp numpy array because all other methods of indexing
+        # do not correctly align
+        temp = np.ma.masked_all(out.shape)
+        if not lowmem:
+            var.load()
+
         for tz in utz:
+            ridx, cidx = np.where(tzlay.data == tz)
             if verbose > 1:
-                print(tz)
-            ridx, cidx = np.where(tzlay == tz)
-            out[:, :, ridx, cidx] = var[:, :, ridx, cidx].shift(TSTEP=-tz)
+                print(
+                    f'{tz}, {ridx.size}, {ridx.size / ntoshift:6.1%}'
+                    + f', {nshifted / ntoshift:6.1%}'
+                )
+
+            nshifted += ridx.size
+            temp[:, :, ridx, cidx] = var.isel(
+                ROW=xr.DataArray(ridx, dims=('out',)),
+                COL=xr.DataArray(cidx, dims=('out',))
+            ).shift(TSTEP=-tz)
+
+        out[:] = temp[:]
+        if verbose > 0:
+            print('shifted', nshifted, 'of', ntoshift)
 
         # nk = self._obj.dims['LAY']
         # nj = self._obj.dims['ROW']
@@ -394,7 +421,7 @@ class CmaqAccessor:
         #             out[:, ki, ji, ii] = varcol.shift(TSTEP=-tzcol)
         return out
 
-    def to_lst_dataset(self, timezone, ds=None, verbose=0):
+    def to_lst_dataset(self, timezone, ds=None, lowmem=False, verbose=0):
         """
         Arguments
         ---------
@@ -404,7 +431,10 @@ class CmaqAccessor:
             the first will be used for each.
         ds : xr.Dataset
             File with variables to shift to LST. If None, then self is used
-
+        lowmem : bool
+            If working with low-memory, data response will be slower. Else,
+            use load to load data once. This is really only important for
+            NETCDF3_CLASSIC.
         Returns
         -------
         out : xr.DataArray
@@ -420,11 +450,11 @@ class CmaqAccessor:
                     print(varkey, flush=True)
                 invar = ds[varkey]
                 self.to_lst_dataarray(
-                    timezone, invar, out=var, verbose=verbose
+                    timezone, invar, out=var, lowmem=lowmem, verbose=verbose
                 )
         return outds
 
-    def to_lst(self, timezone, oth=None, verbose=0):
+    def to_lst(self, timezone, oth=None, lowmem=False, verbose=0):
         """
         Arguments
         ---------
@@ -447,9 +477,13 @@ class CmaqAccessor:
         """
 
         if isinstance(oth, (xr.DataArray, xr.Variable)):
-            return self.to_lst_dataarray(timezone, var=oth, verbose=verbose)
+            return self.to_lst_dataarray(
+                timezone, var=oth, lowmem=lowmem, verbose=verbose
+            )
         else:
-            return self.to_lst_dataset(timezone, ds=oth, verbose=verbose)
+            return self.to_lst_dataset(
+                timezone, ds=oth, lowmem=lowmem, verbose=verbose
+            )
 
 # Consider adding more formal support on the backend
 # https://xarray.pydata.org/en/stable/internals/how-to-add-new-backend.html
