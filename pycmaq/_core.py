@@ -3,7 +3,7 @@ __all__ = ['xr', 'pd', 'np', 'plt']
 import xarray as xr
 import pandas as pd
 import numpy as np
-import matplotlib as plt
+import matplotlib.pyplot as plt
 
 
 @xr.register_dataset_accessor("cmaq")
@@ -165,7 +165,12 @@ class CmaqAccessor:
         self.set_vglvls_coord()
         self.set_row_coord()
         self.set_col_coord()
+
     def get_ioapi_variables(self):
+        """
+        Returns a list of variables with IOAPI dimensions. TSTEP, LAY
+        and either PERIM or ROW and COL.
+        """
         from collections import OrderedDict
         obj = self._obj
         OUTVARS = OrderedDict()
@@ -178,6 +183,10 @@ class CmaqAccessor:
         return OUTVARS
 
     def updated_attrs_from_coords(self):
+        """
+        Returns updated attrs dictionary by adjusting projection/time
+        information
+        """
         obj = self._obj
         attrs = obj.attrs.copy()
         attrs['NCOLS'] = np.int32(obj.dims['COL'])
@@ -189,11 +198,16 @@ class CmaqAccessor:
         attrs['NVARS'] = np.int32(len(OUTVARS))
         attrs['VAR-LIST'] = ''.join([k.ljust(16) for k in OUTVARS])
         start_date = obj['TSTEP'].isel(TSTEP=0)
-        attrs['SDATE'] = start_date.dt.strftime('%Y%j').values[...].astype('i4')
-        attrs['STIME'] = start_date.dt.strftime('%H%M%S').values[...].astype('i4')
+        getpart = start_date.dt.strftime
+        attrs['SDATE'] = getpart('%Y%j').values[...].astype('i4')
+        attrs['STIME'] = getpart('%H%M%S').values[...].astype('i4')
         return attrs
 
     def update_from_coords(self):
+        """
+        Updates attrs dictionary by adjusting projection/time
+        information
+        """
         attrs = self.updated_attrs_from_coords()
         self._obj.attrs.update(**attrs)
 
@@ -232,7 +246,7 @@ class CmaqAccessor:
 
         if var_kw is None:
             var_kw = {}
-        obj = self._obj
+
         attrs = self.updated_attrs_from_coords()
         times = self.get_time_frommeta(mid=False, offset=None)
         outf = netCDF4.Dataset(path, mode=mode, **kwds)
@@ -241,7 +255,7 @@ class CmaqAccessor:
                 pv = np.float32(pv)
             elif pk == 'VGLVLS':
                 pv = np.array(pv, dtype='f')
-            
+
             setattr(outf, pk, pv)
 
         outf.createDimension('TSTEP', None)
@@ -250,18 +264,22 @@ class CmaqAccessor:
         outf.createDimension('VAR', outf.NVARS)
         outf.createDimension('ROW', outf.NROWS)
         outf.createDimension('COL', outf.NCOLS)
-        tflag = outf.createVariable('TFLAG', 'i', ('TSTEP', 'VAR', 'DATE-TIME'))
+        tflag = outf.createVariable(
+            'TFLAG', 'i', ('TSTEP', 'VAR', 'DATE-TIME')
+        )
         tflag.long_name = 'TFLAG'.ljust(16)
         tflag.var_desc = 'TFLAG'.ljust(80)
         tflag.units = '<YYYYJJJ,HHMMSS>'.ljust(16)
 
         OUTVARS = self.get_ioapi_variables()
         for key, var in OUTVARS.items():
-            ovar = outf.createVariable(key, var.dtype.char, tuple(var.dims), **var_kw)
+            ovar = outf.createVariable(
+                key, var.dtype.char, tuple(var.dims), **var_kw
+            )
             for pk, pv in var.attrs.items():
                 ovar.setncattr(pk, pv)
             ovar[:] = var[:]
-        
+
         tflag[:, :, 0] = times.dt.strftime('%Y%j').astype('i')
         tflag[:, :, 1] = times.dt.strftime('%H%M%S').astype('i')
         if close:
@@ -284,6 +302,7 @@ class CmaqAccessor:
 
     @property
     def pyproj(self):
+        """Return a pyproj.Proj object based on the proj4 attribute."""
         if self._pyproj is None:
             import pyproj
             self._pyproj = pyproj.Proj(self.proj4, preserve_units=True)
@@ -291,6 +310,7 @@ class CmaqAccessor:
 
     @property
     def pycno(self):
+        """Return a pycno.cno object based on the pyproj attribute."""
         if self._pycno is None:
             import pycno
             self._pycno = pycno.cno(proj=self.pyproj)
@@ -315,38 +335,82 @@ class CmaqAccessor:
         """
         return self.cnodraw('MWDB_Coasts_USA_3.cnob', ax=ax, **kwds)
 
-    def to_lst_dataarray(self, timezone, var, out=None):
+    def to_lst_dataarray(self, timezone, var, out=None, verbose=0):
+        """
+        Arguments
+        ---------
+        timezone : xr.DataArray
+            timezone is the UTC offset in hours (e.g., EST=-5) and should
+            have dims (ROW, and COL). If dims LAY and TSTEP are present,
+            the first will be used for each.
+        var : xr.Variable
+            variable to shift to LST
+        out : xr.DataArray
+            variable to house the output. If None, then out = var * 0
+
+        Returns
+        -------
+        out : xr.DataArray
+            variable with data in LST. Note that all dates are tz-naive
+        """
         if out is None:
             out = var * 0
-        nk = self._obj.dims['LAY']
-        nj = self._obj.dims['ROW']
-        ni = self._obj.dims['COL']
         if 'TSTEP' in timezone.dims:
             assert(timezone.dims['TSTEP'] == 1)
             tzvar = timezone.isel(TSTEP=0).round(0).astype('i')
         else:
             tzvar = timezone.round(0).astype('i')
 
+        if 'LAY' in tzvar.dims:
+            tzlay = tzvar.isel(LAY=0)
+        else:
+            tzlay = tzvar
+
+        utz = np.unique(tzlay.data)
+        for tz in utz:
+            if verbose > 1:
+                print(tz)
+            ridx, cidx = np.where(tzlay == tz)
+            out[:, :, ridx, cidx] = var[:, :, ridx, cidx].shift(TSTEP=-tz)
+
+        # nk = self._obj.dims['LAY']
+        # nj = self._obj.dims['ROW']
+        # ni = self._obj.dims['COL']
+        #
         # can be substantially optimized.
         # For example, all shifts are k-independent. Remove k loop
-        # Also, there are only a few time zones, so shifts can be done on groups of cells
-        for ki in range(nk):
-            varlay = var.isel(LAY=ki)
-            if 'LAY' in tzvar.dims:
-                tzlay = tzvar.isel(LAY=ki)
-            else:
-                tzlay = tzvar
-            lasttz = 0
-            for ji in range(nj):
-                varrow = varlay.isel(ROW=ji)
-                tzrow = tzlay.isel(ROW=ji)
-                for ii in range(ni):
-                    varcol = varrow.isel(COL=ii)
-                    tzcol = tzrow.isel(COL=ii).values[...]                        
-                    out[:, ki, ji, ii] = varcol.shift(TSTEP=-tzcol)
+        # Also, there are only a few time zones, so shifts can be done on
+        # groups of cells
+        #
+        # Currently, this is a very slow process and should be addressed.
+        # for ki in range(nk):
+        #     varlay = var.isel(LAY=ki)
+        #     for ji in range(nj):
+        #         varrow = varlay.isel(ROW=ji)
+        #         tzrow = tzlay.isel(ROW=ji)
+        #         for ii in range(ni):
+        #             varcol = varrow.isel(COL=ii)
+        #             tzcol = tzrow.isel(COL=ii).values[...]
+        #             out[:, ki, ji, ii] = varcol.shift(TSTEP=-tzcol)
         return out
 
     def to_lst_dataset(self, timezone, ds=None, verbose=0):
+        """
+        Arguments
+        ---------
+        timezone : xr.DataArray
+            timezone is the UTC offset in hours (e.g., EST=-5) and should
+            have dims (ROW, and COL). If dims LAY and TSTEP are present,
+            the first will be used for each.
+        ds : xr.Dataset
+            File with variables to shift to LST. If None, then self is used
+
+        Returns
+        -------
+        out : xr.DataArray
+            variable with data in LST. Note that all dates are tz-naive
+        """
+
         if ds is None:
             ds = self._obj
         outds = ds.copy()
@@ -355,12 +419,35 @@ class CmaqAccessor:
                 if verbose > 0:
                     print(varkey, flush=True)
                 invar = ds[varkey]
-                self.to_lst_dataarray(timezone, invar, out=var)
+                self.to_lst_dataarray(
+                    timezone, invar, out=var, verbose=verbose
+                )
         return outds
 
     def to_lst(self, timezone, oth=None, verbose=0):
+        """
+        Arguments
+        ---------
+        timezone : xr.DataArray
+            timezone is the UTC offset in hours (e.g., EST=-5) and should
+            have dims (ROW, and COL). If dims LAY and TSTEP are present,
+            the first will be used for each.
+        oth : xr.Variable or xr.Dataset
+            variable or dataset to shift to LST. If xr.Variable or
+            xr.DataArray, then to_lst_datarray is called. If xr.Dataset, then
+            to_lst_dataset is called.
+        verbose : int
+            Level of verbosity. Passed to to_lst_dataset.
+
+        Returns
+        -------
+        out : xr.DataArray or xr.Dataset
+            variable or dataset with data in LST. Note that all dates are
+            tz-naive
+        """
+
         if isinstance(oth, (xr.DataArray, xr.Variable)):
-            return self.to_lst_dataarray(timezone, var=oth)
+            return self.to_lst_dataarray(timezone, var=oth, verbose=verbose)
         else:
             return self.to_lst_dataset(timezone, ds=oth, verbose=verbose)
 

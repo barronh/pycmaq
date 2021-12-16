@@ -4,9 +4,9 @@ with open("README.md", "r") as fh:
     long_description = fh.read()
 
 with open("pycmaq/__init__.py", "r") as fh:
-    for l in fh:
-        if l.startswith('__version__'):
-            exec(l)
+    for line in fh:
+        if line.startswith('__version__'):
+            exec(line)
             break
     else:
         __version__ = 'x.y.z'
