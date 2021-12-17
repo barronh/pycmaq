@@ -4,6 +4,7 @@ import xarray as xr
 import pandas as pd
 import numpy as np
 import matplotlib.pyplot as plt
+from . import utils
 
 
 @xr.register_dataset_accessor("cmaq")
@@ -179,7 +180,7 @@ class CmaqAccessor:
                 v.dims == ('TSTEP', 'LAY', 'ROW', 'COL')
                 or v.dims == ('TSTEP', 'LAY', 'PERIM')
             ):
-                OUTVARS[k] = v
+                OUTVARS[k] = obj[k]
         return OUTVARS
 
     def updated_attrs_from_coords(self):
@@ -336,7 +337,7 @@ class CmaqAccessor:
         return self.cnodraw('MWDB_Coasts_USA_3.cnob', ax=ax, **kwds)
 
     def to_lst_dataarray(
-        self, timezone, var, out=None, lowmem=False, verbose=0
+        self, timezone, var, out=None, verbose=0
     ):
         """
         Arguments
@@ -349,10 +350,6 @@ class CmaqAccessor:
             variable to shift to LST
         out : xr.DataArray
             variable to house the output. If None, then out = var * 0
-        lowmem : bool
-            If working with low-memory, data response will be slower. Else,
-            use load to load data once. This is really only important for
-            NETCDF3_CLASSIC.
 
         Returns
         -------
@@ -379,8 +376,6 @@ class CmaqAccessor:
         # Using temp numpy array because all other methods of indexing
         # do not correctly align
         temp = np.ma.masked_all(out.shape)
-        if not lowmem:
-            var.load()
 
         for tz in utz:
             ridx, cidx = np.where(tzlay.data == tz)
@@ -421,7 +416,7 @@ class CmaqAccessor:
         #             out[:, ki, ji, ii] = varcol.shift(TSTEP=-tzcol)
         return out
 
-    def to_lst_dataset(self, timezone, ds=None, lowmem=False, verbose=0):
+    def to_lst_dataset(self, timezone, ds=None, verbose=0):
         """
         Arguments
         ---------
@@ -431,10 +426,7 @@ class CmaqAccessor:
             the first will be used for each.
         ds : xr.Dataset
             File with variables to shift to LST. If None, then self is used
-        lowmem : bool
-            If working with low-memory, data response will be slower. Else,
-            use load to load data once. This is really only important for
-            NETCDF3_CLASSIC.
+
         Returns
         -------
         out : xr.DataArray
@@ -450,11 +442,11 @@ class CmaqAccessor:
                     print(varkey, flush=True)
                 invar = ds[varkey]
                 self.to_lst_dataarray(
-                    timezone, invar, out=var, lowmem=lowmem, verbose=verbose
+                    timezone, invar, out=var, verbose=verbose
                 )
         return outds
 
-    def to_lst(self, timezone, oth=None, lowmem=False, verbose=0):
+    def to_lst(self, timezone, oth=None, verbose=0):
         """
         Arguments
         ---------
@@ -478,12 +470,84 @@ class CmaqAccessor:
 
         if isinstance(oth, (xr.DataArray, xr.Variable)):
             return self.to_lst_dataarray(
-                timezone, var=oth, lowmem=lowmem, verbose=verbose
+                timezone, var=oth, verbose=verbose
             )
         else:
             return self.to_lst_dataset(
-                timezone, ds=oth, lowmem=lowmem, verbose=verbose
+                timezone, ds=oth, verbose=verbose
             )
+
+    def findtrop(self, method=None, pvthreshold=2, wmomin=5000, hybrid='and'):
+        """
+        Thin wrapper around pycmaq.utils.met functions pvtroposphere and
+        wmotroposphere. See their documentation for more information.
+
+        If file has PV, TA, and ZH, it will use a hybrid approach (either)
+        If file has PV, it will use the pv approach
+        If file has TA and ZH, it will use the WMO approach
+        """
+        obj = self._obj
+        if method is None:
+            if (
+                'PV' in obj.variables
+                and 'TA' in obj.variables
+                and 'ZH' in obj.variables
+            ):
+                method = 'hybrid'
+            elif 'PV' in obj.variables:
+                method = 'pv'
+            elif (
+                'TA' in obj.variables
+                and 'ZH' in obj.variables
+            ):
+                method = 'wmo'
+        method = method.lower()
+        if method == 'pv':
+            return utils.met.pvtroposphere(obj, threshold=pvthreshold)
+        elif method == 'wmo':
+            return utils.met.wmotroposphere(obj, minval=wmomin)
+        elif method == 'hybrid':
+            ispv = utils.met.pvtroposphere(obj, threshold=pvthreshold)
+            iswmo = utils.met.wmotroposphere(obj, minval=wmomin)
+            if hybrid.lower() == 'or':
+                return ispv | iswmo
+            elif hybrid.lower() == 'and':
+                return ispv | iswmo
+            else:
+                raise KeyError(f'{hybrid} unknown; try "or" or "and"')
+        else:
+            raise KeyError(f'{method} unknown; try "pv", "wmo", or "hybrid"')
+
+    def calcdz(self):
+        return utils.met.dz(self._obj)
+
+    def pressure_interp(
+        self, PRESOUT, PRESIN=None, VAR=None, verbose=0, **kwds
+    ):
+        from collections import OrderedDict
+        obj = self._obj
+        if PRESIN is None:
+            PRESIN = obj.PRES
+
+        if VAR is not None:
+            return utils.met.pressure_interp(
+                PRESOUT, PRESIN, VAR, verbose=verbose, **kwds
+            )
+        else:
+            invars = self.get_ioapi_variables()
+            outvars = OrderedDict()
+            for key, var in invars.items():
+                if verbose > 0:
+                    print(key)
+                outvars[key] = utils.met.pressure_interp(
+                    PRESOUT, PRESIN, var, verbose=verbose, **kwds
+                )
+            outds = xr.Dataset(outvars)
+            outds.attrs['VGLVLS'] = np.arange(outds.dims['LAY'] + 1)
+            outds.attrs['NLAYS'] = outds.dims['LAY']
+            outds.attrs['VGTOP'] = -9999
+            return outds
+
 
 # Consider adding more formal support on the backend
 # https://xarray.pydata.org/en/stable/internals/how-to-add-new-backend.html

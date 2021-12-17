@@ -49,6 +49,10 @@ qf.cmaq.set_coords()
 # Subset species
 qsf = qf[['O3', 'PM25_FRM']]
 
+# Speed up by loading to memory
+qsf.O3.load()
+qsf.PM25_FRM.load()
+
 # Convert to LST
 qlstf = qsf.cmaq.to_lst(tzone)
 
