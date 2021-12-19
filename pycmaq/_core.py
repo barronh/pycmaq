@@ -357,7 +357,7 @@ class CmaqAccessor:
             variable with data in LST. Note that all dates are tz-naive
         """
         if out is None:
-            out = var * 0
+            out = var.copy()
         if 'TSTEP' in timezone.dims:
             assert(timezone.dims['TSTEP'] == 1)
             tzvar = timezone.isel(TSTEP=0).round(0).astype('i')
@@ -435,7 +435,7 @@ class CmaqAccessor:
 
         if ds is None:
             ds = self._obj
-        outds = ds.copy()
+        outds = ds.copy(deep=True)
         for varkey, var in outds.variables.items():
             if var.dims == ('TSTEP', 'LAY', 'ROW', 'COL'):
                 if verbose > 0:
