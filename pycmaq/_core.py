@@ -389,7 +389,7 @@ class CmaqAccessor:
             temp[:, :, ridx, cidx] = var.isel(
                 ROW=xr.DataArray(ridx, dims=('out',)),
                 COL=xr.DataArray(cidx, dims=('out',))
-            ).shift(TSTEP=-tz)
+            ).shift(TSTEP=tz)
 
         out[:] = temp[:]
         if verbose > 0:
