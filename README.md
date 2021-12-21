@@ -120,6 +120,43 @@ ax.plot(x / 2, x, 'k--')
 ax.plot(x, x / 2, 'k--')
 ```
 
+### Example 4
+
+Created gridded fractional area from a Shapefile. In this case, we'll use
+the Natural Earlth 110m Countries shapefile that is publicly available.
+
+```
+import pycmaq as pq
+import shapefile
+
+
+gdpath = 'GRIDDESC'
+shppath = 'ne_110m_admin_0_countries.shp'
+
+gf = pq.open_dataset('GRIDDESC', engine='pseudonetcdf', backend_kwargs=dict(format='griddesc', GDNAM='108NHEMI2'))
+ssf = shapefile.Reader(shppath)
+
+fields = ssf.fields[1:] 
+field_names = [field[0] for field in fields] 
+# print(field_names)
+# ['featurecla', ... , 'ADM0_A3', ..., 'CONTINENT', 'REGION_UN', 'SUBREGION', 'REGION_WB', ...]
+
+# Group shapes by United Nations region
+grpkey = 'REGION_UN'
+shapes = {}
+for sr in ssf.iterShapeRecords():
+    atr = dict(zip(field_names, sr.record))
+    shapes.setdefault(atr[grpkey], []).append(asShape(sr.shape))
+    
+print(len(shapes), sorted(shapes))
+# 7 ['Africa', 'Americas', 'Antarctica', 'Asia', 'Europe', 'Oceania', 'Seven seas (open ocean)']
+
+# Create fractional coverage
+frac = gf.cmaq.gridfraction(shapes['Americas'], srcproj=4326)
+
+frac.plot()
+gf.cmaq.cnocountries()
+```
 
 ## Notes
 
