@@ -548,6 +548,14 @@ class CmaqAccessor:
             outds.attrs['VGTOP'] = -9999
             return outds
 
+    def gridfraction(self, shapes, srcproj=None, propname='area', verbose=0):
+        """
+        See utils.shapes.gridfraction_frompoly
+        """
+        return utils.shapes.gridfraction_frompoly(
+            self._obj, shapes, srcproj=srcproj, propname=propname,
+            verbose=verbose
+        )
 
 # Consider adding more formal support on the backend
 # https://xarray.pydata.org/en/stable/internals/how-to-add-new-backend.html

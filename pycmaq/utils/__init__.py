@@ -1,3 +1,4 @@
-__all__ = ['met']
+__all__ = ['met', 'shapes']
 
 from . import met
+from . import shapes

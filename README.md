@@ -1,7 +1,7 @@
 # pycmaq
 Utilities for working with CMAQ data in Python.
 
-pycmaq is still in active development.
+pycmaq is still in active development, and should only be used with caution.
 
 ## Installation
 
@@ -24,7 +24,6 @@ import pycmaq as pq
 
 aconcpath = 'ACONC_20160101'
 qf = pq.open_dataset(aconcpath)
-qf.cmaq.set_coords()
 
 qf.O3.sel(TSTEP=slice('2016-01-01 17', '2016-01-01 23')).mean('TSTEP').isel(LAY=0).plot()
 qf.cmaq.cnostates()
@@ -38,13 +37,12 @@ import pycmaq as pq
 
 g2path = 'GRIDCRO2D_20160101'
 g2f = pq.open_dataset(g2path)
-g2f.cmaq.set_coords()
+
 # remove the TSTEP and LAY dimensions for broadcasting
 tzone = (g2f.LON.isel(TSTEP=0, LAY=0) / 15).round(0).astype('i')
 
 combinepath = 'COMBINE_201601'
 qf = pq.open_dataset(combinepath)
-qf.cmaq.set_coords()
 
 # Subset species
 qsf = qf[['O3', 'PM25_FRM']]
