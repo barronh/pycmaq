@@ -39,13 +39,12 @@ class CmaqAccessor:
         time: xarray.DataArray
             times with dimension TSTEP
         """
-        from datetime import datetime
         obj = self._obj
         jdates = obj.TFLAG.isel(**{'VAR': 0, 'DATE-TIME': 0}).values
-        jdates = np.maximum(jdates, 1001)
+        jdates = np.maximum(jdates, 1970001)
         hhmmss = obj.TFLAG.isel(**{'VAR': 0, 'DATE-TIME': 1}).values
         times = np.array([
-            datetime.strptime(f'{j:07d} {t:06d}', '%Y%j %H%M%S')
+            pd.to_datetime(f'{j:07d} {t:06d}', format='%Y%j %H%M%S')
             for j, t in zip(jdates, hhmmss)
         ])
         if mid:
@@ -251,11 +250,14 @@ class CmaqAccessor:
         attrs = self.updated_attrs_from_coords()
         times = self.get_time_frommeta(mid=False, offset=None)
         outf = netCDF4.Dataset(path, mode=mode, **kwds)
-        for pk, pv in attrs.items():
+        fileattrs = {pk: pv for pk, pv in attrs.items()}
+        for pk, pv in fileattrs.items():
             if pk == 'VGTOP':
                 pv = np.float32(pv)
             elif pk == 'VGLVLS':
                 pv = np.array(pv, dtype='f')
+            elif isinstance(pv, (int, np.int64, np.int32)):
+                pv = np.int32(pv)
 
             setattr(outf, pk, pv)
 
@@ -277,12 +279,20 @@ class CmaqAccessor:
             ovar = outf.createVariable(
                 key, var.dtype.char, tuple(var.dims), **var_kw
             )
-            for pk, pv in var.attrs.items():
+            outattrs = {pk: pv for pk, pv in var.attrs.items()}
+            outattrs.setdefault('long_name', key.ljust(16)[:16])
+            outattrs.setdefault('var_desc', key.ljust(80)[:80])
+            outattrs.setdefault('units', 'unknown'.ljust(16)[:16])
+            for pk, pv in outattrs.items():
                 ovar.setncattr(pk, pv)
             ovar[:] = var[:]
 
-        tflag[:, :, 0] = times.dt.strftime('%Y%j').astype('i')
-        tflag[:, :, 1] = times.dt.strftime('%H%M%S').astype('i')
+        if fileattrs['TSTEP'] == 0:
+            tflag[:, :, 0] = 0
+            tflag[:, :, 1] = 0
+        else:
+            tflag[:, :, 0] = times.dt.strftime('%Y%j').astype('i')
+            tflag[:, :, 1] = times.dt.strftime('%H%M%S').astype('i')
         if close:
             outf.close()
             return None

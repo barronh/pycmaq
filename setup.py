@@ -30,4 +30,7 @@ setuptools.setup(
     python_requires='>=3.6',
     install_requires=["numpy", "matplotlib", "xarray", "pyproj", "netCDF4"],
     include_package_data=True,
+    extras_require={
+        "shapely":  ["shapely"],
+    }
 )
