@@ -152,10 +152,15 @@ print(len(shapes), sorted(shapes))
 # 7 ['Africa', 'Americas', 'Antarctica', 'Asia', 'Europe', 'Oceania', 'Seven seas (open ocean)']
 
 # Create fractional coverage
-frac = gf.cmaq.gridfraction(shapes['Americas'], srcproj=4326)
+outkeys = []
+for key, shape in shapes.items():
+    if key == 'Seven seas (open ocean)':
+        key = 'Seven_seas'
+    outkeys.append(key)
+    frac = gf.cmaq.gridfraction(shape, srcproj=4326)
+    gf[key] = frac.expand_dims(TSTEP=1, LAY=1)
 
-frac.plot()
-gf.cmaq.cnocountries()
+gf[outkeys].to_ioapi('REGION_UN.nc')
 ```
 
 ## Notes
