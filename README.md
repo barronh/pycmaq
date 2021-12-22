@@ -128,6 +128,7 @@ the Natural Earlth 110m Countries shapefile that is publicly available.
 ```
 import pycmaq as pq
 import shapefile
+from shapely.geometry import asShape
 
 
 gdpath = 'GRIDDESC'
