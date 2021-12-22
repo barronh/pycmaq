@@ -585,7 +585,7 @@ class CmaqAccessor:
         return outdf
 
     @classmethod
-    def from_dataframe(cls, df, **ioapi_kw):
+    def from_dataframe(cls, df, fill_value=None, **ioapi_kw):
         """
         Expects df.attrs to contain meaningful ioapi attributes. These
         attributes can be overwritten by ioapi_kw
@@ -595,6 +595,8 @@ class CmaqAccessor:
         else:
             indims = ('TSTEP', 'LAY', 'ROW', 'COL')
         outds = xr.Dataset.from_dataframe(df.reorder_levels(indims))
+        if fill_value is not None:
+            outds = outds.fillna(fill_value)
         outds.attrs.update(df.attrs)
         outds.attrs.update(ioapi_kw)
         return outds
@@ -617,7 +619,7 @@ class CmaqAccessor:
         #     [times, LAYS, ROWS, COLS], names=('TSTEP', 'LAY', 'ROW', 'COL')
         # )
         # fulldf = df.reindex(outidx)
-        smallds = cls.from_dataframe(df, **ioapi_kw)
+        smallds = cls.from_dataframe(df, fill_value=fill_value, **ioapi_kw)
         outds = smallds.reindex(
             TSTEP=times, COL=COLS, ROW=ROWS, LAY=LAYS,
             fill_value=fill_value
