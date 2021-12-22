@@ -122,7 +122,7 @@ def togrid(gf, srcshapes, srcproj=4326, clip=True):
             # The polar stereographic domain is ill-defined in lonlat
             # Use the minimum y to create a full domain
             # miny = min(domain.exterior.xy[1]) - 1
-            miny = 30
+            miny = -30
             domain = Polygon(
                 [
                     [-180, miny], [180, miny],
