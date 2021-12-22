@@ -59,7 +59,7 @@ def wholedomain(NROWS, NCOLS, lonlat=False, proj=None):
     celltree : shapely.strtree.STRtree
         tree of cell polygons. Good for fast querying
     """
-    from shapely.geometry import asPolygon
+    from shapely.geometry import Polygon
 
     sx = np.arange(NCOLS + 1)
     sy = np.zeros_like(sx)
@@ -71,7 +71,7 @@ def wholedomain(NROWS, NCOLS, lonlat=False, proj=None):
     wx = np.zeros_like(wy)
     x = np.concatenate([sx, ex, nx, wx])
     y = np.concatenate([sy, ey, ny, wy])
-    wholedomain = asPolygon(np.array([x, y]).T)
+    wholedomain = Polygon(np.array([x, y]).T)
     if lonlat:
         if proj is None:
             raise ValueError('When lonlat=True, proj is required')
@@ -107,7 +107,7 @@ def togrid(gf, srcshapes, srcproj=4326, clip=True):
         List of shapes in grid projection
     """
     from shapely.ops import transform
-    from shapely.geometry import asPolygon
+    from shapely.geometry import Polygon
     from pyproj import Transformer
 
     if clip:
@@ -121,8 +121,9 @@ def togrid(gf, srcshapes, srcproj=4326, clip=True):
         if gf.GDTYP == 6:
             # The polar stereographic domain is ill-defined in lonlat
             # Use the minimum y to create a full domain
-            miny = min(domain.exterior.xy[1]) - 1
-            domain = asPolygon(
+            # miny = min(domain.exterior.xy[1]) - 1
+            miny = 30
+            domain = Polygon(
                 [
                     [-180, miny], [180, miny],
                     [180, 90], [-180, 90],

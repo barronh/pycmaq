@@ -128,7 +128,7 @@ the Natural Earlth 110m Countries shapefile that is publicly available.
 ```
 import pycmaq as pq
 import shapefile
-from shapely.geometry import asShape
+from shapely.geometry import shape
 
 
 gdpath = 'GRIDDESC'
@@ -147,18 +147,18 @@ grpkey = 'REGION_UN'
 shapes = {}
 for sr in ssf.iterShapeRecords():
     atr = dict(zip(field_names, sr.record))
-    shapes.setdefault(atr[grpkey].rstrip('\x00'), []).append(asShape(sr.shape))
+    shapes.setdefault(atr[grpkey].rstrip('\x00'), []).append(shape(sr.shape))
     
 print(len(shapes), sorted(shapes))
 # 7 ['Africa', 'Americas', 'Antarctica', 'Asia', 'Europe', 'Oceania', 'Seven seas (open ocean)']
 
 # Create fractional coverage
 outkeys = []
-for key, shape in shapes.items():
+for key, shapei in shapes.items():
     if key == 'Seven seas (open ocean)':
         key = 'Seven_seas'
     outkeys.append(key)
-    frac = gf.cmaq.gridfraction(shape, srcproj=4326)
+    frac = gf.cmaq.gridfraction(shapei, srcproj=4326)
     gf[key] = frac.expand_dims(TSTEP=1, LAY=1)
 
 gf[outkeys].cmaq.to_ioapi('REGION_UN.nc')
