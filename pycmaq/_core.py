@@ -567,5 +567,62 @@ class CmaqAccessor:
             verbose=verbose
         )
 
+    def to_dataframe(self):
+        """
+        Thin wrapper around Dataset.to_dataframe:
+        * ensures dim_order persists (TSTEP, LAY, ROW, COL PERIM)
+        * adds all Dataset.attrs to the dataframe.attrs
+        """
+        if 'PERIM' in self._obj.dims:
+            outdims = ('TSTEP', 'LAY', 'PERIM')
+        else:
+            outdims = ('TSTEP', 'LAY', 'ROW', 'COL')
+
+        # Only output IOAPI compliant variables
+        outds = self._obj[sorted(self.get_ioapi_variables())]
+        outdf = outds.to_dataframe(dim_order=outdims)
+        outdf.attrs.update(self.updated_attrs_from_coords())
+        return outdf
+
+    @classmethod
+    def from_dataframe(cls, df, **ioapi_kw):
+        """
+        Expects df.attrs to contain meaningful ioapi attributes. These
+        attributes can be overwritten by ioapi_kw
+        """
+        if 'PERIM' in df.index.names:
+            indims = ('TSTEP', 'LAY', 'PERIM')
+        else:
+            indims = ('TSTEP', 'LAY', 'ROW', 'COL')
+        outds = xr.Dataset.from_dataframe(df.reorder_levels(indims))
+        outds.attrs.update(df.attrs)
+        outds.attrs.update(ioapi_kw)
+        return outds
+
+    @classmethod
+    def from_dataframe_incomplete(cls, df, fill_value=None, **ioapi_kw):
+        from copy import deepcopy
+        attrs = deepcopy(df.attrs)
+        attrs.update(ioapi_kw)
+        sdate = pd.to_datetime(
+            f'{attrs["SDATE"]:07d} {attrs["TSTEP"]:06d}', format='%Y%j %H%M%S'
+        )
+        times = pd.date_range(
+            sdate, df.index.get_level_values('TSTEP').max(), freq='1H'
+        )
+        ROWS = np.arange(attrs['NROWS']) + 0.5
+        COLS = np.arange(attrs['NCOLS']) + 0.5
+        LAYS = (attrs['VGLVLS'][:-1] + attrs['VGLVLS'][1:]) / 2
+        # outidx = pd.MultiIndex.from_product(
+        #     [times, LAYS, ROWS, COLS], names=('TSTEP', 'LAY', 'ROW', 'COL')
+        # )
+        # fulldf = df.reindex(outidx)
+        smallds = cls.from_dataframe(df, **ioapi_kw)
+        outds = smallds.reindex(
+            TSTEP=times, COL=COLS, ROW=ROWS, LAY=LAYS,
+            fill_value=fill_value
+        )
+        return outds
+
 # Consider adding more formal support on the backend
 # https://xarray.pydata.org/en/stable/internals/how-to-add-new-backend.html

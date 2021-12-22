@@ -23,3 +23,26 @@ def open_dataset(*args, **kwds):
     outf = xr.open_dataset(*args, **kwds)
     outf.cmaq.set_coords()
     return outf
+
+
+def from_dataframe(df, **ioapi_kw):
+    """
+    Thin wrapper around xr.Dataset.cmaq.from_dataframe for convenience
+    as pycmaq.from_dataframe. Requires complete dataframe.
+
+    ROW and COL indices should range from 0.5 ... N - 0.5
+    LAY indices should match (VGLVLS[k] + VGLVLS[k + 1]) / 2
+    TSTEP should have np.datetime64 or pd.Time
+    """
+    return xr.Dataset.cmaq.from_dataframe(df, **ioapi_kw)
+
+
+def from_dataframe_incomplete(df, fill_value=None, **ioapi_kw):
+    """
+    Thin wrapper around xr.Dataset.cmaq.from_dataframe_incomplete for
+    convenience as pycmaq.from_dataframe. Missing values will be filled with
+    nan before creating the Dataset.
+    """
+    return xr.Dataset.cmaq.from_dataframe_incomplete(
+        df, fill_value=fill_value, **ioapi_kw
+    )
