@@ -134,7 +134,7 @@ from shapely.geometry import asShape
 gdpath = 'GRIDDESC'
 shppath = 'ne_110m_admin_0_countries.shp'
 
-gf = pq.open_dataset('GRIDDESC', engine='pseudonetcdf', backend_kwargs=dict(format='griddesc', GDNAM='108NHEMI2'))
+gf = pq.open_dataset(gdpath, engine='pseudonetcdf', backend_kwargs=dict(format='griddesc', GDNAM='108NHEMI2'))
 ssf = shapefile.Reader(shppath)
 
 fields = ssf.fields[1:] 
@@ -147,7 +147,7 @@ grpkey = 'REGION_UN'
 shapes = {}
 for sr in ssf.iterShapeRecords():
     atr = dict(zip(field_names, sr.record))
-    shapes.setdefault(atr[grpkey], []).append(asShape(sr.shape))
+    shapes.setdefault(atr[grpkey].rstrip('\x00'), []).append(asShape(sr.shape))
     
 print(len(shapes), sorted(shapes))
 # 7 ['Africa', 'Americas', 'Antarctica', 'Asia', 'Europe', 'Oceania', 'Seven seas (open ocean)']
@@ -161,7 +161,7 @@ for key, shape in shapes.items():
     frac = gf.cmaq.gridfraction(shape, srcproj=4326)
     gf[key] = frac.expand_dims(TSTEP=1, LAY=1)
 
-gf[outkeys].to_ioapi('REGION_UN.nc')
+gf[outkeys].cmaq.to_ioapi('REGION_UN.nc')
 ```
 
 ## Notes
