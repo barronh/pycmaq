@@ -1,75 +1,8 @@
 from .. import xr
 from .. import np
 from .. import pd
-
-
-def gettest():
-    import tempfile
-    from netCDF4 import Dataset
-    with tempfile.TemporaryDirectory() as tmpdirname:
-        f = Dataset(f'{tmpdirname}/test.nc', 'w')
-        f.createDimension('TSTEP', None)
-        f.createDimension('DATE-TIME', 2)
-        f.createDimension('LAY', 1)
-        f.createDimension('VAR', 1)
-        f.createDimension('ROW', 3)
-        f.createDimension('COL', 8)
-        TFLAG = f.createVariable('TFLAG', 'i', ('TSTEP', 'VAR', 'DATE-TIME'))
-        TFLAG.units = "<YYYYDDD,HHMMSS>"
-        TFLAG.long_name = "TFLAG           "
-        TFLAG.var_desc = (
-            "Timestep-valid flags:  (1) YYYYDDD or (2) HHMMSS".ljust(80)
-        )
-        TA = f.createVariable('TA', 'f', ('TSTEP', 'LAY', 'ROW', 'COL'))
-        TA.long_name = "TA              "
-        TA.units = "K               "
-        TA.var_desc = (
-            "Variable TA output from M3 prototype LCM EM".ljust(80)
-        )
-
-        f.IOAPI_VERSION = "1.0 1997349 (Dec. 15, 1997)"
-        f.EXEC_ID = "????????????????".ljust(80)
-        f.FTYPE = 1
-        f.CDATE = 2008072
-        f.CTIME = 224149
-        f.WDATE = 2008072
-        f.WTIME = 224149
-        f.SDATE = 1983250
-        f.STIME = 0
-        f.TSTEP = 10000
-        f.NTHIK = 1
-        f.NCOLS = 8
-        f.NROWS = 3
-        f.NLAYS = 1
-        f.NVARS = 1
-        f.GDTYP = 2
-        f.P_ALP = 30.
-        f.P_BET = 60.
-        f.P_GAM = -90.
-        f.XCENT = -90.
-        f.YCENT = 40.
-        f.XORIG = -2831931.
-        f.YORIG = -730076.
-        f.XCELL = 600000.
-        f.YCELL = 600000.
-        f.VGTYP = 1
-        f.VGTOP = np.float32(10000.)
-        f.VGLVLS = np.array([1., 0.98], dtype='f')
-        f.GDNAM = "ALPHA_CROSS     "
-        f.UPNAM = "                "
-        f.setncattr('VAR-LIST', "TA              ")
-        f.FILEDESC = ""
-        f.HISTORY = ""
-        TFLAG[0, 0] = [1983250, 0]
-
-        TA[0] = [
-            303.7344, 303.2994, 303.1, 303.2, 303.3, 303.4, 303.5, 303.6,
-            303.1111, 303.2222, 303.3, 303.4, 303.5, 303.6, 303.6, 303.7,
-            303.7557, 303.4526, 303.6, 303.7, 303.8, 303.9, 303.1, 303.2
-        ]
-        f.close()
-        ds = xr.open_dataset(f'{tmpdirname}/test.nc')
-    return ds
+import pytest
+from .helper import has_shapely, gettest, getstdatm, getutc
 
 
 def test_cmaq_accessor():
@@ -170,3 +103,117 @@ def test_cmaq_to_ioapi():
             if key != 'TFLAG':
                 refv = ds[key]
                 assert(np.allclose(refv, chkv))
+
+
+def test_cmaq_to_dataframe():
+    ds = gettest()
+    ds.cmaq.set_coords()
+    df = ds.cmaq.to_dataframe()
+    assert(
+        np.allclose(ds.variables['TA'][:].values.ravel(), df['TA'].values)
+    )
+
+
+def test_cmaq_from_dataframe():
+    ds = gettest()
+    ds.cmaq.set_coords()
+    df = ds.cmaq.to_dataframe()
+    rds = xr.Dataset.cmaq.from_dataframe(df)
+    assert(
+        np.allclose(ds['TA'][:], rds['TA'][:])
+    )
+
+
+def from_dataframe_incomplete():
+    pytest.skip("Needs to be implemented; volunteers?")
+
+
+def test_cmaq_gridfraction():
+    if not has_shapely:
+        pytest.skip("requires shapely")
+    ds = gettest(True)
+    from shapely.geometry import Polygon
+    s = Polygon([[0.5, 0.5], [7.5, 0.5], [7.5, 2.5], [0.5, 2.5], [0.5, 0.5]])
+    fa = ds.cmaq.gridfraction([s], srcproj=None, propname='area')
+    chkvals = np.zeros((ds.NROWS, ds.NCOLS), dtype='f')
+    chkvals[:] = 0.5
+    chkvals[1:-1, 1:-1] = 1
+    chkvals[0, 0] = 0.25
+    chkvals[0, -1] = 0.25
+    chkvals[-1, -1] = 0.25
+    chkvals[-1, 0] = 0.25
+    assert(np.allclose(fa, chkvals))
+
+
+def test_cmaq_to_lst_dataarray():
+    utcf = getutc()
+    tzvals = np.array([-10, -9, -8, -7, -6, -5, -4, -3])[None, :].repeat(3, 0)
+    tz = xr.DataArray(
+        tzvals,
+        dims=('ROW', 'COL')
+    )
+    lsthour = utcf.cmaq.to_lst(tz, utcf.HOUR)
+    assert((lsthour[0, 0].values == -tz.values).all())
+
+
+def test_cmaq_to_lst_dataset():
+    utcf = getutc()
+    tzvals = np.array([-10, -9, -8, -7, -6, -5, -4, -3])[None, :].repeat(3, 0)
+    tz = xr.DataArray(
+        tzvals,
+        dims=('ROW', 'COL')
+    )
+    lstf = utcf.cmaq.to_lst(tz)
+    HOUR = lstf.HOUR
+    assert((HOUR[0, 0] == -tz.values).all())
+    HOUR[tzvals[0], 0, 0, np.arange(8)]
+    assert(np.isnan(HOUR[:, 0, 0].values[tzvals[0], np.arange(8)]).all())
+    assert((HOUR[:, 0, 0].values[tzvals[0] - 1, np.arange(8)] == 23).all())
+
+
+def test_cmaq_findtrop():
+    stdf = getstdatm()
+    istrop_wmo = stdf.cmaq.findtrop(method='wmo', pvthreshold=2, wmomin=5000)
+    assert((istrop_wmo.sum('LAY').values == 7).all())
+    istrop_pv2 = stdf.cmaq.findtrop(method='pv', pvthreshold=2)
+    assert((istrop_pv2.sum('LAY').values == 5).all())
+    istrop_pv3 = stdf.cmaq.findtrop(method='pv', pvthreshold=3)
+    assert((istrop_pv3.sum('LAY').values == 6).all())
+    istrop_hyand = stdf.cmaq.findtrop(
+        method='hybrid', pvthreshold=2, hybrid='and'
+    )
+    assert((istrop_hyand.sum('LAY').values == 5).all())
+    istrop_hyor = stdf.cmaq.findtrop(
+        method='hybrid', pvthreshold=2, hybrid='or'
+    )
+    assert((istrop_hyor.sum('LAY').values == 7).all())
+
+
+def test_cmaq_pressure_interp():
+    ds = getstdatm()
+    lvls = ds.attrs['VGLVLS'][1:3]
+    OUTPRES = (
+        ds['TA'].isel(LAY=slice(0, 2))
+        * 0 + xr.DataArray(
+            lvls,
+            dims=('LAY',)
+        ) * (101325. - 10000) + 10000
+    )
+    outds = ds.cmaq.pressure_interp(OUTPRES, ds['PRES'])
+    assert(np.allclose(outds['PRES'].values, OUTPRES.values))
+    chkvals = np.array([[
+        [[279.59699403, 279.19654964, 279.01300238, 279.10506593,
+          279.19709896, 279.28914449, 279.38120804, 279.47327158],
+         [279.02323166, 279.12549397, 279.19709896, 279.28914449,
+          279.38120804, 279.47327158, 279.47327158, 279.56533513],
+         [279.61658560, 279.33757337, 279.47327158, 279.56533513,
+          279.65735015, 279.74941370, 279.01300238, 279.10506593]],
+
+        [[262.42727848, 262.05142235, 261.87914898, 261.96555600,
+          262.05195209, 262.13834817, 262.22475519, 262.31116222],
+         [261.88875628, 261.98474010, 262.05195209, 262.13834817,
+          262.22475519, 262.31116222, 262.31116222, 262.39756924],
+         [262.44567775, 262.18378840, 262.31116222, 262.39756924,
+          262.48393481, 262.57034184, 261.87914898, 261.96555600]]
+    ]])
+    assert(np.allclose(outds['TA'].values, chkvals))

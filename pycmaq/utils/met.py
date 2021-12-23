@@ -16,6 +16,7 @@ def pvtroposphere(inputf, threshold=2):
         (
             inputf['PV'] < threshold
         ).isel(LAY=slice(None, None, -1)).cumsum('LAY') > 1
+        # should this be >= ?
     ).isel(LAY=slice(None, None, -1))
     return istrop
 
@@ -67,6 +68,7 @@ def wmotroposphere(inputf, minval=5000):
     # as a surrogate for higher levels within 2 km.
     dTdZ2 = dTdZ * 1
     dTdZ2[:, :-1] = - (dT[:, :-1] + dT[:, 1:]) / (dZ[:, :-1] + dZ[:, 1:])
+    dTdZ2[:, -1] = - dT[:, -1] / dZ[:, -1]
 
     # Adding minimum 5km tropopause by not allowing a below min flag
     # below 5km.

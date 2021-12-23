@@ -522,7 +522,7 @@ class CmaqAccessor:
             if hybrid.lower() == 'or':
                 return ispv | iswmo
             elif hybrid.lower() == 'and':
-                return ispv | iswmo
+                return ispv & iswmo
             else:
                 raise KeyError(f'{hybrid} unknown; try "or" or "and"')
         else:
