@@ -107,7 +107,7 @@ def test_cmaq_to_ioapi():
             if key != 'TFLAG':
                 refv = ds[key]
                 assert(np.allclose(refv, chkv))
-        with pytest.raises(IOError) as e_info:
+        with pytest.raises(IOError):
             chkds = ds.cmaq.to_ioapi(outpath)
         ds.attrs['TSTEP'] = 0
         outpath = f'{tmpdirname}/writeout_tind.nc'
@@ -117,7 +117,6 @@ def test_cmaq_to_ioapi():
         outpath = f'{tmpdirname}/writeout_close.nc'
         chkds = ds.cmaq.to_ioapi(outpath, overwrite=True, close=True)
         assert(chkds is None)
-        
 
 
 def test_cmaq_to_dataframe():
@@ -236,11 +235,11 @@ def test_cmaq_findtrop():
     assert((istrop_def2 == istrop_wmo).all())
     istrop_def2 = stdf[['PV']].cmaq.findtrop()
     assert((istrop_def2 == istrop_pv2).all())
-    with pytest.raises(KeyError) as e_info:
+    with pytest.raises(KeyError):
         stdf.cmaq.findtrop(method='turkey')
-    with pytest.raises(KeyError) as e_info:
+    with pytest.raises(KeyError):
         stdf.cmaq.findtrop(method='hybrid', hybrid='turkey')
-    
+
 
 def test_cmaq_pressure_interp():
     ds = getstdatm()
