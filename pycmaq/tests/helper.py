@@ -10,6 +10,7 @@ except Exception:
 
 
 def gettest(coords=False):
+    from .. import open_dataset
     import tempfile
     from netCDF4 import Dataset
     with tempfile.TemporaryDirectory() as tmpdirname:
@@ -75,9 +76,11 @@ def gettest(coords=False):
             303.7557, 303.4526, 303.6, 303.7, 303.8, 303.9, 303.1, 303.2
         ]
         f.close()
-        ds = xr.open_dataset(f'{tmpdirname}/test.nc')
+
         if coords:
-            ds.cmaq.set_coords()
+            ds = open_dataset(f'{tmpdirname}/test.nc')
+        else:
+            ds = xr.open_dataset(f'{tmpdirname}/test.nc')
     return ds
 
 

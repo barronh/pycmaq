@@ -46,7 +46,11 @@ def test_cmaq_get_time():
     refval = np.array('1983-09-07T00:30:00.0', dtype='datetime64[ns]')
     chkval = ds.cmaq.get_time(tflag=True, mid=True)
     assert((chkval == refval).all())
+    chkval = ds.cmaq.get_time(tflag=True, offset=pd.Timedelta(minutes=30))
+    assert((chkval == refval).all())
     chkval = ds.cmaq.get_time(tflag=False, mid=True)
+    assert((chkval == refval).all())
+    chkval = ds.cmaq.get_time(tflag=False, offset=pd.Timedelta(minutes=30))
     assert((chkval == refval).all())
 
 
@@ -103,6 +107,17 @@ def test_cmaq_to_ioapi():
             if key != 'TFLAG':
                 refv = ds[key]
                 assert(np.allclose(refv, chkv))
+        with pytest.raises(IOError) as e_info:
+            chkds = ds.cmaq.to_ioapi(outpath)
+        ds.attrs['TSTEP'] = 0
+        outpath = f'{tmpdirname}/writeout_tind.nc'
+        chkds = ds.cmaq.to_ioapi(outpath, overwrite=True, close=False)
+        assert(chkds.TSTEP == 0)
+        assert((chkds.variables['TFLAG'][:] == 0).all())
+        outpath = f'{tmpdirname}/writeout_close.nc'
+        chkds = ds.cmaq.to_ioapi(outpath, overwrite=True, close=True)
+        assert(chkds is None)
+        
 
 
 def test_cmaq_to_dataframe():
@@ -115,6 +130,7 @@ def test_cmaq_to_dataframe():
 
 
 def test_cmaq_from_dataframe():
+    from .. import from_dataframe
     ds = gettest()
     ds.cmaq.set_coords()
     df = ds.cmaq.to_dataframe()
@@ -122,10 +138,25 @@ def test_cmaq_from_dataframe():
     assert(
         np.allclose(ds['TA'][:], rds['TA'][:])
     )
+    rds = from_dataframe(df)
+    assert(
+        np.allclose(ds['TA'][:], rds['TA'][:])
+    )
 
 
-def from_dataframe_incomplete():
-    pytest.skip("Needs to be implemented; volunteers?")
+def test_cmaq_from_dataframe_incomplete():
+    from .. import from_dataframe_incomplete
+    ds = gettest()
+    ds.cmaq.set_coords()
+    df = ds.cmaq.to_dataframe()
+    dfi = df.query('ROW == COL')
+    dsi = ds.cmaq.from_dataframe_incomplete(dfi)
+    assert((dsi.TA[:] == ds.TA[:]).sum() == 3)
+    dsi = from_dataframe_incomplete(dfi)
+    assert((dsi.TA[:] == ds.TA[:]).sum() == 3)
+    dsi = ds.cmaq.from_dataframe_incomplete(dfi, fill_value=-9)
+    assert((dsi.TA[:] == ds.TA[:]).sum() == 3)
+    assert((dsi.TA[:] == -9).sum() == 21)
 
 
 def test_cmaq_gridfraction():
@@ -151,6 +182,18 @@ def test_cmaq_to_lst_dataarray():
     tz = xr.DataArray(
         tzvals,
         dims=('ROW', 'COL')
+    )
+    lsthour = utcf.cmaq.to_lst(tz, utcf.HOUR)
+    assert((lsthour[0, 0].values == -tz.values).all())
+    tz = xr.DataArray(
+        tzvals[None, :, :],
+        dims=('LAY', 'ROW', 'COL')
+    )
+    lsthour = utcf.cmaq.to_lst(tz, utcf.HOUR)
+    assert((lsthour[0, 0].values == -tz.values).all())
+    tz = xr.DataArray(
+        tzvals[None, None, :, :],
+        dims=('TSTEP', 'LAY', 'ROW', 'COL')
     )
     lsthour = utcf.cmaq.to_lst(tz, utcf.HOUR)
     assert((lsthour[0, 0].values == -tz.values).all())
@@ -187,7 +230,17 @@ def test_cmaq_findtrop():
         method='hybrid', pvthreshold=2, hybrid='or'
     )
     assert((istrop_hyor.sum('LAY').values == 7).all())
-
+    istrop_def = stdf.cmaq.findtrop()
+    assert((istrop_def == istrop_hyand).all())
+    istrop_def2 = stdf[['ZH', 'TA']].cmaq.findtrop()
+    assert((istrop_def2 == istrop_wmo).all())
+    istrop_def2 = stdf[['PV']].cmaq.findtrop()
+    assert((istrop_def2 == istrop_pv2).all())
+    with pytest.raises(KeyError) as e_info:
+        stdf.cmaq.findtrop(method='turkey')
+    with pytest.raises(KeyError) as e_info:
+        stdf.cmaq.findtrop(method='hybrid', hybrid='turkey')
+    
 
 def test_cmaq_pressure_interp():
     ds = getstdatm()
@@ -217,3 +270,31 @@ def test_cmaq_pressure_interp():
           262.48393481, 262.57034184, 261.87914898, 261.96555600]]
     ]])
     assert(np.allclose(outds['TA'].values, chkvals))
+    outds = ds.cmaq.pressure_interp(OUTPRES)
+    assert(np.allclose(outds['TA'].values, chkvals))
+    outta = ds.cmaq.pressure_interp(OUTPRES, VAR=ds['TA'])
+    assert(np.allclose(outta.values, chkvals))
+
+
+def test_cmaq_update_from_coords():
+    ds = gettest(True)
+    dss = ds.isel(COL=slice(1, -1), ROW=slice(1, -1))
+    dss.cmaq.update_from_coords()
+    assert(dss.XORIG == (ds.XORIG + ds.XCELL))
+    assert(dss.YORIG == (ds.YORIG + ds.YCELL))
+
+
+def test_cmaq_dz():
+    stdf = getstdatm()
+    stdf['ZF'] = stdf['ZH']
+    chkvals = stdf.cmaq.calcdz()
+    refvals = np.array([
+        2000., 3000., 4000., 1000., 1000., 1000., 1000., 1000., 1000., 1000.,
+        500.
+    ], dtype='f')
+    assert((chkvals == refvals[None, :, None, None]).all())
+
+
+def test_cmaq_pycno():
+    ds = gettest()
+    ds.cmaq.pycno

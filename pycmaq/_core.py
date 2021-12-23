@@ -33,6 +33,8 @@ class CmaqAccessor:
         ---------
         mid : bool
             If mid, assume the true time is half a time step ahead of TFLAG.
+        offset : time delta
+            Add offset to times before returning
 
         Returns
         -------
@@ -64,6 +66,8 @@ class CmaqAccessor:
         ---------
         mid : bool
             If mid, assume the true time is half a time step ahead of TFLAG.
+        offset : time delta
+            Add offset to times before returning
 
         Returns
         -------
@@ -209,7 +213,7 @@ class CmaqAccessor:
         information
         """
         attrs = self.updated_attrs_from_coords()
-        self._obj.attrs.update(**attrs)
+        self._obj.attrs = attrs
 
     def to_ioapi(
         self, path, mode='w', overwrite=False, close=True, var_kw=None, **kwds
@@ -368,13 +372,17 @@ class CmaqAccessor:
         """
         if out is None:
             out = var.copy()
+
         if 'TSTEP' in timezone.dims:
-            assert(timezone.dims['TSTEP'] == 1)
+            nt = dict(zip(timezone.dims, timezone.shape))['TSTEP']
+            assert(nt == 1)
             tzvar = timezone.isel(TSTEP=0).round(0).astype('i')
         else:
             tzvar = timezone.round(0).astype('i')
 
         if 'LAY' in tzvar.dims:
+            nk = dict(zip(tzvar.dims, tzvar.shape))['LAY']
+            assert(nk == 1)
             tzlay = tzvar.isel(LAY=0)
         else:
             tzlay = tzvar
@@ -607,10 +615,14 @@ class CmaqAccessor:
         attrs = deepcopy(df.attrs)
         attrs.update(ioapi_kw)
         sdate = pd.to_datetime(
-            f'{attrs["SDATE"]:07d} {attrs["TSTEP"]:06d}', format='%Y%j %H%M%S'
+            f'{attrs["SDATE"]:07d} {attrs["STIME"]:06d}', format='%Y%j %H%M%S'
+        )
+        dt = (
+            pd.to_datetime('1900-01-01 010000', format='%Y-%m-%d %H%M%S')
+            - pd.to_datetime('1900-01-01')
         )
         times = pd.date_range(
-            sdate, df.index.get_level_values('TSTEP').max(), freq='1H'
+            sdate, df.index.get_level_values('TSTEP').max(), freq=dt
         )
         ROWS = np.arange(attrs['NROWS']) + 0.5
         COLS = np.arange(attrs['NCOLS']) + 0.5
