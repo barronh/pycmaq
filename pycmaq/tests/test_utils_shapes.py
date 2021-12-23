@@ -1,4 +1,5 @@
 import numpy as np
+import pandas as pd
 import pytest
 from ..utils import shapes
 from .helper import has_shapely, gettest
@@ -40,21 +41,24 @@ def test_shapes_wholedomainlonlat():
 
 
 def test_util_to_grid():
+    from shapely.geometry import Polygon
     if not has_shapely:
         pytest.skip("requires shapely")
     gf = gettest(True)
-    from shapely.geometry import Polygon
-    s = Polygon([
+    xy = np.array([(0, 0), (8, 0), (8, 3), (0, 3), (0, 0)], dtype='d')
+    x, y = xy.T
+    refxy = pd.DataFrame(dict(x=x, y=y)).sort_values(by=['x', 'y'])
+    mysll = Polygon([
         gf.cmaq.pyproj(x, y, inverse=True)
-        for x, y in [[0, 0], [0, 3], [8, 3], [8, 0], [0, 0]]
+        for x, y in xy
     ])
-    srcshapes = [s]
+    srcshapes = [mysll]
 
     destshapes = shapes.togrid(gf, srcshapes, srcproj=4326, clip=True)
-    x, y = destshapes[0].exterior.xy
-    assert(np.allclose(x, [0, 0, 8, 8, 0]))
-    assert(np.allclose(y, [0, 3, 3, 0, 0]))
+    x, y = np.asarray(destshapes[0].exterior.xy)
+    chkxy = pd.DataFrame(dict(x=x, y=y)).sort_values(by=['x', 'y'])
+    assert(np.allclose(chkxy.values, refxy.values))
     destshapes = shapes.togrid(gf, srcshapes, srcproj=4326, clip=False)
-    x, y = destshapes[0].exterior.xy
-    assert(np.allclose(x, [0, 0, 8, 8, 0]))
-    assert(np.allclose(y, [0, 3, 3, 0, 0]))
+    x, y = np.asarray(destshapes[0].exterior.xy)
+    chkxy = pd.DataFrame(dict(x=x, y=y)).sort_values(by=['x', 'y'])
+    assert(np.allclose(chkxy.values, refxy.values))
