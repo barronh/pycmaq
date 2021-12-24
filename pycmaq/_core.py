@@ -193,11 +193,17 @@ class CmaqAccessor:
         """
         obj = self._obj
         attrs = obj.attrs.copy()
-        attrs['NCOLS'] = np.int32(obj.dims['COL'])
-        attrs['NROWS'] = np.int32(obj.dims['ROW'])
         attrs['NLAYS'] = np.int32(obj.dims['LAY'])
-        attrs['XORIG'] = obj.XORIG + (obj['COL'].values[0] - 0.5) * obj.XCELL
-        attrs['YORIG'] = obj.YORIG + (obj['ROW'].values[0] - 0.5) * obj.YCELL
+        if 'PERIM' in obj.dims:
+            attrs['NCOLS'] = np.int32(obj.attrs['NCOLS'])
+            attrs['NROWS'] = np.int32(obj.attrs['NROWS'])
+            attrs['XORIG'] = obj.attrs['XORIG']
+            attrs['YORIG'] = obj.attrs['YORIG']
+        else:
+            attrs['NCOLS'] = np.int32(obj.dims['COL'])
+            attrs['NROWS'] = np.int32(obj.dims['ROW'])
+            attrs['XORIG'] = obj.XORIG + (obj['COL'].values[0] - 0.5) * obj.XCELL
+            attrs['YORIG'] = obj.YORIG + (obj['ROW'].values[0] - 0.5) * obj.YCELL
         OUTVARS = self.get_ioapi_variables()
         attrs['NVARS'] = np.int32(len(OUTVARS))
         attrs['VAR-LIST'] = ''.join([k.ljust(16) for k in OUTVARS])
@@ -216,7 +222,8 @@ class CmaqAccessor:
         self._obj.attrs = attrs
 
     def to_ioapi(
-        self, path, mode='w', overwrite=False, close=True, var_kw=None, **kwds
+        self, path, mode='w', overwrite=False, close=True, var_kw=None,
+        format='NETCDF4_CLASSIC', **kwds
     ):
         """
         Arguments
@@ -253,7 +260,7 @@ class CmaqAccessor:
 
         attrs = self.updated_attrs_from_coords()
         times = self.get_time_frommeta(mid=False, offset=None)
-        outf = netCDF4.Dataset(path, mode=mode, **kwds)
+        outf = netCDF4.Dataset(path, mode=mode, format=format, **kwds)
         fileattrs = {pk: pv for pk, pv in attrs.items()}
         for pk, pv in fileattrs.items():
             if pk == 'VGTOP':
@@ -269,8 +276,13 @@ class CmaqAccessor:
         outf.createDimension('DATE-TIME', 2)
         outf.createDimension('LAY', outf.NLAYS)
         outf.createDimension('VAR', outf.NVARS)
-        outf.createDimension('ROW', outf.NROWS)
-        outf.createDimension('COL', outf.NCOLS)
+        
+        OUTVARS = self.get_ioapi_variables()
+        if 'PERIM' in self._obj.dims:
+            outf.createDimension('PERIM', self._obj.dims['PERIM'])
+        else:
+            outf.createDimension('ROW', outf.NROWS)
+            outf.createDimension('COL', outf.NCOLS)
         tflag = outf.createVariable(
             'TFLAG', 'i', ('TSTEP', 'VAR', 'DATE-TIME')
         )
@@ -278,15 +290,19 @@ class CmaqAccessor:
         tflag.var_desc = 'TFLAG'.ljust(80)
         tflag.units = '<YYYYJJJ,HHMMSS>'.ljust(16)
 
-        OUTVARS = self.get_ioapi_variables()
+        
         for key, var in OUTVARS.items():
             ovar = outf.createVariable(
                 key, var.dtype.char, tuple(var.dims), **var_kw
             )
             outattrs = {pk: pv for pk, pv in var.attrs.items()}
-            outattrs.setdefault('long_name', key.ljust(16)[:16])
-            outattrs.setdefault('var_desc', key.ljust(80)[:80])
-            outattrs.setdefault('units', 'unknown'.ljust(16)[:16])
+            outattrs.setdefault('long_name', key)
+            outattrs['long_name'] = outattrs['long_name'].ljust(16)[:16]
+            outattrs.setdefault('var_desc', key)
+            outattrs['var_desc'] = outattrs['var_desc'].ljust(80)[:80]
+            outattrs.setdefault('units', 'unknown')
+            outattrs['units'] = outattrs['units'].ljust(16)[:16]
+            
             for pk, pv in outattrs.items():
                 ovar.setncattr(pk, pv)
             ovar[:] = var[:]
@@ -322,6 +338,55 @@ class CmaqAccessor:
             import pyproj
             self._pyproj = pyproj.Proj(self.proj4, preserve_units=True)
         return self._pyproj
+
+    def xy2ll(self, x=None, y=None):
+        if x is None or y is None:
+            if x is None and y is None:
+                x, y = xr.broadcast(self._obj.COL, self._obj.ROW)
+            else:
+                raise ValueError('x and y must be none if either is none.')
+        lon = x.copy()
+        lat = y.copy()
+        lon[:], lat[:] = self.pyproj(x.values, y.values, inverse=True)
+        return lon, lat
+
+    def ll2xy(self, lon, lat):
+        x = lon.copy()
+        y = lat.copy()
+        lon = np.asarray(lon)
+        lat = np.asarray(lat)
+        x[:], y[:] = self.pyproj(lon, lat, inverse=False)
+        return x, y
+
+    def ll2ij(self, lon, lat):
+        x, y = self.ll2xy(lon, lat)
+        col = np.floor(x) + 0.5
+        row = np.floor(y) + 0.5
+        return col, row
+
+    def perimxy(self):
+        obj = self._obj
+        bx = np.arange(obj.attrs['NCOLS'] + 1) + 0.5
+        by = bx * 0 - 0.5
+        ry = np.arange(obj.attrs['NROWS'] + 1) + 0.5
+        rx = ry * 0 + obj.attrs['NCOLS'] + 0.5
+        tx = np.arange(-1, obj.attrs['NCOLS'])[::-1] + 0.5
+        ty = tx * 0 + obj.attrs['NROWS'] + 0.5
+        ly = np.arange(-1, obj.attrs['NROWS'])[::-1] + 0.5
+        lx = ly * 0 - 0.5
+        px = xr.DataArray(
+            np.concatenate([bx, rx, tx, lx]),
+            dims=('PERIM',)
+        )
+        py = xr.DataArray(
+            np.concatenate([by, ry, ty, ly]),
+            dims=('PERIM',)
+        )
+        return px, py
+
+    def perimlonlat(self):
+        px, py = self.perimxy()
+        return self.xy2ll(px, py)
 
     @property
     def pycno(self):
