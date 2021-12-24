@@ -202,8 +202,12 @@ class CmaqAccessor:
         else:
             attrs['NCOLS'] = np.int32(obj.dims['COL'])
             attrs['NROWS'] = np.int32(obj.dims['ROW'])
-            attrs['XORIG'] = obj.XORIG + (obj['COL'].values[0] - 0.5) * obj.XCELL
-            attrs['YORIG'] = obj.YORIG + (obj['ROW'].values[0] - 0.5) * obj.YCELL
+            attrs['XORIG'] = (
+                obj.XORIG + (obj['COL'].values[0] - 0.5) * obj.XCELL
+            )
+            attrs['YORIG'] = (
+                obj.YORIG + (obj['ROW'].values[0] - 0.5) * obj.YCELL
+            )
         OUTVARS = self.get_ioapi_variables()
         attrs['NVARS'] = np.int32(len(OUTVARS))
         attrs['VAR-LIST'] = ''.join([k.ljust(16) for k in OUTVARS])
@@ -276,7 +280,7 @@ class CmaqAccessor:
         outf.createDimension('DATE-TIME', 2)
         outf.createDimension('LAY', outf.NLAYS)
         outf.createDimension('VAR', outf.NVARS)
-        
+
         OUTVARS = self.get_ioapi_variables()
         if 'PERIM' in self._obj.dims:
             outf.createDimension('PERIM', self._obj.dims['PERIM'])
@@ -290,7 +294,6 @@ class CmaqAccessor:
         tflag.var_desc = 'TFLAG'.ljust(80)
         tflag.units = '<YYYYJJJ,HHMMSS>'.ljust(16)
 
-        
         for key, var in OUTVARS.items():
             ovar = outf.createVariable(
                 key, var.dtype.char, tuple(var.dims), **var_kw
@@ -302,7 +305,7 @@ class CmaqAccessor:
             outattrs['var_desc'] = outattrs['var_desc'].ljust(80)[:80]
             outattrs.setdefault('units', 'unknown')
             outattrs['units'] = outattrs['units'].ljust(16)[:16]
-            
+
             for pk, pv in outattrs.items():
                 ovar.setncattr(pk, pv)
             ovar[:] = var[:]
