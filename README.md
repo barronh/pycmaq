@@ -7,19 +7,21 @@ pycmaq is still in active development, and should only be used with caution.
 
 Until `pycmaq` is more developed, installation will be performed with pip and the url.
 
-`pip install https://github.com/barronh/pycmaq/archive/refs/heads/main.zip`
+```
+pip install https://github.com/barronh/pycmaq/archive/refs/heads/main.zip
+```
 
-When `pycmaq` is further developed, installation will use pypi.
+When `pycmaq` is further developed, installation will use PyPI.
 
 ## Examples
 
 Two simple examples are shown below. The first plots a time subset
 for layer one. The second calculates daily average PM25 and MDA8 ozone
-in local solar time is shown below.
+in local solar time as shown below.
 
 ### Example 1
 
-```
+```python
 import pycmaq as pq
 
 aconcpath = 'ACONC_20160101'
@@ -32,13 +34,14 @@ qf.cmaq.cnostates()
 
 ### Example 2
 
-```
+```python
 import pycmaq as pq
 
 g2path = 'GRIDCRO2D_20160101'
 g2f = pq.open_dataset(g2path)
 
-# remove the TSTEP and LAY dimensions for broadcasting
+# Estimate the timezone (as integer UTC offset),
+# removing the TSTEP and LAY dimensions for broadcasting
 tzone = (g2f.LON.isel(TSTEP=0, LAY=0) / 15).round(0).astype('i')
 
 combinepath = 'COMBINE_201601'
@@ -81,7 +84,7 @@ qmda8f = qlstf[['O3']].rolling(
 Assuming that you have completed Example 2, you can do a quick evaluation
 for MDA8 ozone.
 
-```
+```python
 aqsdailypath = 'daily_44201_2016.zip'
 
 rawaqs = pq.pd.read_csv(aqsdailypath).query('`Event Type` in ("None", "Included")')
@@ -123,9 +126,10 @@ ax.plot(x, x / 2, 'k--')
 ### Example 4
 
 Created gridded fractional area from a Shapefile. In this case, we'll use
-the Natural Earlth 110m Countries shapefile that is publicly available.
+the Natural Earlth 110m Countries shapefile that is
+[publicly available](https://www.naturalearthdata.com/downloads/110m-cultural-vectors/).
 
-```
+```python
 import pycmaq as pq
 import shapefile
 from shapely.geometry import shape
