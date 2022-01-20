@@ -343,6 +343,10 @@ class CmaqAccessor:
         return self._pyproj
 
     def xy2ll(self, x=None, y=None):
+        """
+        Convert x/y projected coordinates to longitude and latitude in decimal
+        degrees. Simple wrapper around pyproj(x, y, inverse=True)
+        """
         if x is None or y is None:
             if x is None and y is None:
                 x, y = xr.broadcast(self._obj.COL, self._obj.ROW)
@@ -354,6 +358,10 @@ class CmaqAccessor:
         return lon, lat
 
     def ll2xy(self, lon, lat):
+        """
+        Convert longitude and latitude in decimal degrees to the x/y
+        coordinates. Simple wrapper around pyproj(lon, lat, inverse=False).
+        """
         x = lon.copy()
         y = lat.copy()
         lon = np.asarray(lon)
@@ -362,20 +370,38 @@ class CmaqAccessor:
         return x, y
 
     def ll2ij(self, lon, lat):
+        """
+        Convert longitude and latitude in decimal degrees to the row/col
+        indices.
+        """
         x, y = self.ll2xy(lon, lat)
         col = np.floor(x) + 0.5
         row = np.floor(y) + 0.5
         return col, row
 
     def perimxy(self):
+        """
+        Perimeter is defined as the set of cells that goes around the domain.
+
+        It starts at the cell south of the southwest corner (-0.5, 0.5) and
+        moves southeast of the southeast corner (-0.5, NCOLS+0.5). From there,
+        it goes to the northeast of the northeast corner (NROWS+0.5,
+        NCOLS+0.5). From there, it skips to the cell northwest of the northwest
+        corner (NROWS+0.5, -0.5) and proceeds to the cell north of the
+        northeast corner (NROWS+0.5, NCOLS-0.5). From there, it skips to the
+        southwest of the southwest corner (-0.5, -0.5) and goes to the west of
+        the northwest corner (NROWS-0.5, -0.5).
+
+        https://www.cmascenter.org/ioapi/documentation/all_versions/html/BDY.jpg
+        """
         obj = self._obj
         bx = np.arange(obj.attrs['NCOLS'] + 1) + 0.5
         by = bx * 0 - 0.5
         ry = np.arange(obj.attrs['NROWS'] + 1) + 0.5
         rx = ry * 0 + obj.attrs['NCOLS'] + 0.5
-        tx = np.arange(-1, obj.attrs['NCOLS'])[::-1] + 0.5
+        tx = np.arange(-1, obj.attrs['NCOLS']) + 0.5
         ty = tx * 0 + obj.attrs['NROWS'] + 0.5
-        ly = np.arange(-1, obj.attrs['NROWS'])[::-1] + 0.5
+        ly = np.arange(-1, obj.attrs['NROWS']) + 0.5
         lx = ly * 0 - 0.5
         px = xr.DataArray(
             np.concatenate([bx, rx, tx, lx]),
@@ -388,6 +414,9 @@ class CmaqAccessor:
         return px, py
 
     def perimlonlat(self):
+        """
+        Converts perimxy results to longitude/latitude in decimal degrees.
+        """
         px, py = self.perimxy()
         return self.xy2ll(px, py)
 
@@ -605,11 +634,29 @@ class CmaqAccessor:
             raise KeyError(f'{method} unknown; try "pv", "wmo", or "hybrid"')
 
     def calcdz(self):
+        """
+        See pycmaq.utils.met.dz
+        """
         return utils.met.dz(self._obj)
 
     def pressure_interp(
         self, PRESOUT, PRESIN=None, VAR=None, verbose=0, **kwds
     ):
+        """
+        PRESOUT: xarray.DataArray
+            Target file pressure coordinates.
+        PRESIN : xarray.DataArray or None
+            If provided, this is the pressure for for the source dataset.
+            If not provided, the dataset must contain PRES (i.e, MCIP pressure)
+        VAR : xarray.DataArray or None
+            Interpolate a single variable.
+        verbose : int
+            Level of verbosity
+        kwds : mappable
+            Passed pycmaq.utils.met.pressure_interp
+
+        See pycmaq.utils.met.perssure_interp for more details
+        """
         from collections import OrderedDict
         obj = self._obj
         if PRESIN is None:
