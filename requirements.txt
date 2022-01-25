@@ -1,0 +1,9 @@
+###### Requirements without Version Specifiers ######
+pyproj
+xarray
+pseudonetcdf
+netCDF4
+shapely==1.7.1
+pytest
+pycno
+flake8
