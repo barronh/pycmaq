@@ -125,20 +125,38 @@ class CmaqAccessor:
         Set COL coord to mid points 0.5 ... NCOLS - 0.5
         """
         obj = self._obj
-        obj['COL'] = xr.DataArray(
-            np.arange(obj.NCOLS) + 0.5,
-            dims=('COL',), name='COL'
-        )
+        if obj.attrs.get('GDTYP', 2) == 1:
+            obj['COL'] = xr.DataArray(
+                (
+                    np.arange(obj.NCOLS) * obj.attrs['XCELL']
+                    + obj.attrs['XCELL'] / 2 + obj.attrs['XORIG']
+                ),
+                dims=('COL',), name='COL'
+            )
+        else:
+            obj['COL'] = xr.DataArray(
+                np.arange(obj.NCOLS) + 0.5,
+                dims=('COL',), name='COL'
+            )
 
     def set_row_coord(self):
         """
         Set ROW coord to mid points 0.5 ... NROWS - 0.5
         """
         obj = self._obj
-        obj['ROW'] = xr.DataArray(
-            np.arange(obj.NROWS) + 0.5,
-            dims=('ROW',), name='ROW'
-        )
+        if obj.attrs.get('GDTYP', 2) == 1:
+            obj['ROW'] = xr.DataArray(
+                (
+                    np.arange(obj.NROWS) * obj.attrs['YCELL']
+                    + obj.attrs['YCELL'] / 2 + obj.attrs['YORIG']
+                ),
+                dims=('ROW',), name='ROW'
+            )
+        else:
+            obj['ROW'] = xr.DataArray(
+                np.arange(obj.NROWS) + 0.5,
+                dims=('ROW',), name='ROW'
+            )
 
     def set_vglvls_coord(self):
         """
@@ -349,7 +367,7 @@ class CmaqAccessor:
         """
         if x is None or y is None:
             if x is None and y is None:
-                x, y = xr.broadcast(self._obj.COL, self._obj.ROW)
+                y, x = xr.broadcast(self._obj.ROW, self._obj.COL)
             else:
                 raise ValueError('x and y must be none if either is none.')
         lon = x.copy()
@@ -681,13 +699,53 @@ class CmaqAccessor:
             outds.attrs['VGTOP'] = -9999
             return outds
 
-    def gridfraction(self, shapes, srcproj=None, propname='area', verbose=0):
+    def gridfraction(
+        self, shapes, srcproj=None, clip=True, propname='area', verbose=0
+    ):
         """
         See utils.shapes.gridfraction_frompoly
         """
         return utils.shapes.gridfraction_frompoly(
-            self._obj, shapes, srcproj=srcproj, propname=propname,
+            self._obj, shapes, srcproj=srcproj, clip=True, propname=propname,
             verbose=verbose
+        )
+
+    def attr_from_shapefile(
+        self, shapepath, key, method='laf', srcproj=None, clip=True,
+        units='unknown', verbose=0
+    ):
+        """
+        Calculate timezone offset based on largest area overlap of time zone
+        polygons from a shapefile. The offset is returned as a variable.
+
+        Arguments
+        ---------
+        self : xr.Dataset
+            Must support the cmaq accessor function gridfraction
+        shapepath : str
+            Path to shapefile with timezone as a UTC offset
+        key : str
+            Attribute field name for UTC offset
+        method : str
+            Method for selecting shape for each grid cell. Currently supports
+            laf, areaweigthed, centroid
+        srcproj : scalar
+            Projection definition in terms that pyproj can interpret
+        clip : bool
+            Clip source
+        units : str
+            Unit attribute of output variable
+        verbose : int
+            verbosity level.
+
+        Returns
+        -------
+        tzvar : xr.DataArray
+            Array (TSTEP, LAY, ROW, COL) with UTC offsets as 32-bit floats
+        """
+        return utils.shapes.attr_from_shapefile(
+            gf=self._obj, shapepath=shapepath, key=key, method=method,
+            srcproj=srcproj, clip=clip, units=units, verbose=verbose
         )
 
     def to_dataframe(self):

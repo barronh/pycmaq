@@ -1,5 +1,5 @@
 __all__ = [
-    '__version__', 'open_dataset', 'constants', 'utils',
+    '__version__', 'open_dataset', 'open_griddesc', 'constants', 'utils',
     'xr', 'pd', 'np', 'plt'
 ]
 
@@ -22,6 +22,27 @@ def open_dataset(*args, **kwds):
     kwds.setdefault('backend_kwargs', dict(mode='rs'))
     outf = xr.open_dataset(*args, **kwds)
     outf.cmaq.set_coords()
+    return outf
+
+
+def open_griddesc(gdpath, GDNAM, **kwds):
+    """
+    Simple wrapper around around open_dataset with pseudonetcdf
+    and backend_kwargs specified.
+
+    If gdpath is None, use the default GRIDDESC. For details, use gdpath=None,
+    help=True.
+    """
+    if gdpath is None:
+        from . import default_griddesc
+        return default_griddesc.open_default_griddesc(GDNAM=GDNAM, **kwds)
+    kwds = kwds.copy()
+    kwds['format'] = 'griddesc'
+    kwds['GDNAM'] = GDNAM
+    outf = open_dataset(
+        gdpath, engine='pseudonetcdf',
+        backend_kwargs=kwds
+    )
     return outf
 
 

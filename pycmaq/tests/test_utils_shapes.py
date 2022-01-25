@@ -11,7 +11,7 @@ def test_shapes_wholedomainlonlat():
 
     ds = gettest(True)
     shape = shapes.wholedomain(
-        ds.NROWS, ds.NCOLS, lonlat=True, proj=ds.cmaq.pyproj
+        ds, lonlat=True, proj=ds.cmaq.pyproj
     )
     x, y = shape.exterior.xy
     refx = np.array([
@@ -56,9 +56,11 @@ def test_util_to_grid():
 
     destshapes = shapes.togrid(gf, srcshapes, srcproj=4326, clip=True)
     x, y = np.asarray(destshapes[0].exterior.xy)
-    chkxy = pd.DataFrame(dict(x=x, y=y)).sort_values(by=['x', 'y'])
+    chkxydf = pd.DataFrame(dict(x=x, y=y)).round(6)
+    chkxy = chkxydf.sort_values(by=['x', 'y'], ignore_index=True)
     assert(np.allclose(chkxy.values, refxy.values))
     destshapes = shapes.togrid(gf, srcshapes, srcproj=4326, clip=False)
     x, y = np.asarray(destshapes[0].exterior.xy)
-    chkxy = pd.DataFrame(dict(x=x, y=y)).sort_values(by=['x', 'y'])
+    chkxydf = pd.DataFrame(dict(x=x, y=y)).round(6)
+    chkxy = chkxydf.sort_values(by=['x', 'y'], ignore_index=True)
     assert(np.allclose(chkxy.values, refxy.values))
