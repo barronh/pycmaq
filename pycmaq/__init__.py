@@ -1,12 +1,12 @@
 __all__ = [
-    '__version__', 'open_dataset', 'open_griddesc', 'constants', 'utils',
-    'xr', 'pd', 'np', 'plt'
+    '__version__', 'CmaqAccessor', 'open_dataset', 'open_griddesc', 'constants',
+    'utils', 'xr', 'pd', 'np', 'plt'
 ]
 
 
 __version__ = "0.0.1"
 
-from ._core import xr, pd, np, plt
+from ._core import CmaqAccessor, xr, pd, np, plt
 from . import constants
 from . import utils
 
