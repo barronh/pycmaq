@@ -120,8 +120,7 @@ Example 4
 ~~~~~~~~~
 
 Created gridded fractional area from a Shapefile. In this case, we'll use
-the Natural Earlth 110m Countries shapefile that is
-[publicly available](https://www.naturalearthdata.com/downloads/110m-cultural-vectors/).
+the Natural Earlth 110m Countries shapefile (at https://www.naturalearthdata.com/downloads/110m-cultural-vectors/).
 
 
 .. code-block:: python

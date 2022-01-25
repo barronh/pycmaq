@@ -131,39 +131,25 @@ the Natural Earlth 110m Countries shapefile that is
 
 ```python
 import pycmaq as pq
-import shapefile
-from shapely.geometry import shape
 
 
-gdpath = 'GRIDDESC'
 shppath = 'ne_110m_admin_0_countries.shp'
 
-gf = pq.open_dataset(gdpath, engine='pseudonetcdf', backend_kwargs=dict(format='griddesc', GDNAM='108NHEMI2'))
-ssf = shapefile.Reader(shppath)
+gf = pq.open_griddesc(None, GDNAM='1188NHEMI2')
+valkeys, valfracs = pycmaq.utils.shapes.attr_from_shapefile_areafractions(
+    gf, shppath, 'REGION_UN', srcproj=4326, clip=True, verbose=1
+)
+outkeys = [
+    valkey.replace('Seven seas (open ocean)', 'Seven_seas')
+    for valkey in valkeys
+]
 
-fields = ssf.fields[1:] 
-field_names = [field[0] for field in fields] 
-# print(field_names)
-# ['featurecla', ... , 'ADM0_A3', ..., 'CONTINENT', 'REGION_UN', 'SUBREGION', 'REGION_WB', ...]
+for i, valkey in enumerate(outkeys):
+    gf[valkey] = valfracs.sel(TSTEP=i).expand_dims(TSTEP=1)
 
-# Group shapes by United Nations region
-grpkey = 'REGION_UN'
-shapes = {}
-for sr in ssf.iterShapeRecords():
-    atr = dict(zip(field_names, sr.record))
-    shapes.setdefault(atr[grpkey].rstrip('\x00'), []).append(shape(sr.shape))
-    
-print(len(shapes), sorted(shapes))
-# 7 ['Africa', 'Americas', 'Antarctica', 'Asia', 'Europe', 'Oceania', 'Seven seas (open ocean)']
-
-# Create fractional coverage
-outkeys = []
-for key, shapei in shapes.items():
-    if key == 'Seven seas (open ocean)':
-        key = 'Seven_seas'
-    outkeys.append(key)
-    frac = gf.cmaq.gridfraction(shapei, srcproj=4326)
-    gf[key] = frac.expand_dims(TSTEP=1, LAY=1)
+# Optionally plot the Americas
+# gf['Americas'][0, 0].plot.pcolormesh()
+# gf.cmaq.cnocountries()
 
 gf[outkeys].cmaq.to_ioapi('REGION_UN.nc')
 ```
