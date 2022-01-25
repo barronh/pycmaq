@@ -11,11 +11,12 @@ except Exception:
 
 def gettest(coords=False):
     from .. import open_dataset
+    import os
     import tempfile
     from netCDF4 import Dataset
     with tempfile.TemporaryDirectory() as tmpdirname:
         # File contents copied from 8x3.ncf made by Todd Plessel
-        f = Dataset(f'{tmpdirname}/test.nc', 'w')
+        f = Dataset(os.path.join(tmpdirname, 'test.nc'), 'w')
         f.createDimension('TSTEP', None)
         f.createDimension('DATE-TIME', 2)
         f.createDimension('LAY', 1)
