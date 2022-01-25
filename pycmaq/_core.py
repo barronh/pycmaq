@@ -1,10 +1,11 @@
-__all__ = ['xr', 'pd', 'np', 'plt']
+__all__ = ['CmaqAccessor', 'xr', 'pd', 'np', 'plt']
 
 import xarray as xr
 import pandas as pd
 import numpy as np
 import matplotlib.pyplot as plt
 from . import utils
+import warnings
 
 
 @xr.register_dataset_accessor("cmaq")
@@ -75,8 +76,14 @@ class CmaqAccessor:
             times with dimension TSTEP
         """
         obj = self._obj
+        SDATE = obj.SDATE
+        if SDATE == -635:
+            warnings.warn(
+                f'{SDATE} cannot be used to return a time; using 1970001'
+            )
+            SDATE = 1970001
         reftime = pd.to_datetime(
-            f'{obj.SDATE:07d} {obj.STIME:06d}', format='%Y%j %H%M%S'
+            f'{SDATE:07d} {obj.STIME:06d}', format='%Y%j %H%M%S'
         )
         nt = obj.dims['TSTEP']
         dt = self.get_timedelta()
