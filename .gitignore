@@ -8,6 +8,11 @@ __pycache__/
 
 # Distribution / packaging
 .Python
+docs/_build
+docs/api_source
+docs/_templates
+docs/_static
+docs/make.bat
 build/
 develop-eggs/
 dist/
