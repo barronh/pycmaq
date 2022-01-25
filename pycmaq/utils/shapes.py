@@ -335,6 +335,9 @@ def attr_from_shapefile_areafractions(
     gf, shapepath, key, srcproj=None, clip=True, verbose=0
 ):
     """
+    This function returns the area fractions for each unique value of key in
+    the shapefile at shapepath
+
     See attr_from_shapefile for description of keywords
     """
 
@@ -370,6 +373,9 @@ def attr_from_shapefile_largestareafraction(
     gf, shapepath, key, srcproj=None, clip=True, verbose=0
 ):
     """
+    Returns the attribute value that has the largest area fraction
+    covering each cell.
+
     See attr_from_shapefile for description of keywords
     """
     import xarray as xr
@@ -389,6 +395,9 @@ def attr_from_shapefile_areaweighted(
     gf, shapepath, key, srcproj=None, clip=True, verbose=0
 ):
     """
+    Returns the area weighted attribute value from the area fractions
+    of each unique value of key covering each cell.
+
     See attr_from_shapefile for description of keywords
     """
     import xarray as xr
@@ -406,6 +415,9 @@ def attr_from_shapefile_centroid(
     gf, shapepath, key, srcproj=None, clip=True, verbose=0
 ):
     """
+    Returns the attribute value of the shape that the grid cell centroid
+    intersects.
+
     See attr_from_shapefile for description of keywords
     """
     import xarray as xr
